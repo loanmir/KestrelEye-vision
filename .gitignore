@@ -14,6 +14,7 @@ venv/
 env/
 
 # Data — images and outputs stay local
+data/
 data/raw/
 data/output/
 
