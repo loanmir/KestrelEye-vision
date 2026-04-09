@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html class="light" lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#4c7a63">
+<title>KestrelEye</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+tailwind.config = {
+  darkMode:"class",
+  theme:{ extend:{
+    colors:{
+      "primary":"#4c7a63","primary-container":"#d1e9db","on-primary-container":"#0c2018",
+      "secondary":"#51635a","secondary-container":"#d4e8dd","on-secondary-container":"#0f1f18",
+      "background":"#f7faf9","surface":"#f7faf9","on-surface":"#191c1b",
+      "on-surface-variant":"#404944","outline":"#707974",
+      "surface-container-low":"#eff5f2","surface-container":"#ebf1ee","surface-container-high":"#e5ece9"
+    },
+    borderRadius:{ DEFAULT:"1rem", lg:"1.5rem", xl:"2rem", full:"9999px" },
+    fontFamily:{ headline:["Manrope"], body:["Manrope"], label:["Manrope"] }
+  }}
+}
+</script>
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+*{-webkit-tap-highlight-color:transparent}
+body{font-family:'Manrope',sans-serif}
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+.glass-card{background:rgba(255,255,255,.65);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.5)}
+.tab-content{display:none}.tab-content.active{display:block}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}.pulsing{animation:pulse-dot 1.6s ease-in-out infinite}
+@keyframes val-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}.val-in{animation:val-in .3s ease forwards}
+.spark-bar{transition:height .5s cubic-bezier(.4,0,.2,1),background .3s}
+.sensor-card{transition:transform .2s ease,box-shadow .2s ease}
+.sensor-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px -8px rgba(76,122,99,.2)}
+#risk-card{transition:background .8s ease}
+.progress-fill{transition:width .8s cubic-bezier(.4,0,.2,1)}
+.cfg-input{background:rgba(255,255,255,.85);border:1.5px solid #d1e9db;border-radius:.75rem;padding:.7rem 1rem;font-family:'Manrope',sans-serif;font-size:.875rem;width:100%;outline:none;transition:border-color .2s,box-shadow .2s}
+.cfg-input:focus{border-color:#4c7a63;box-shadow:0 0 0 3px rgba(76,122,99,.12)}
+.nav-safe{padding-bottom:max(1.5rem,env(safe-area-inset-bottom))}
+</style>
+</head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+
+<!-- HEADER -->
+<header class="fixed top-0 w-full z-50 bg-emerald-50/80 backdrop-blur-2xl shadow-sm" style="padding-top:env(safe-area-inset-top)">
+  <div class="flex justify-between items-center px-5 h-14">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary text-[1.2rem]">location_on</span>
+      <h1 id="header-vigneto" class="text-base font-bold text-on-surface font-headline tracking-tight truncate max-w-[180px]">KestrelEye</h1>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1.5">
+        <div id="conn-dot" class="w-2 h-2 rounded-full bg-gray-300 pulsing"></div>
+        <span id="conn-label" class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">--</span>
+      </div>
+      <span id="header-time" class="text-sm font-bold text-on-surface-variant tabular-nums">--:--</span>
+    </div>
+  </div>
+</header>
+
+<main class="pt-16 max-w-7xl mx-auto">
+
+<!-- ════ DASHBOARD ════ -->
+<div id="tab-dashboard" class="tab-content active px-5 pt-5 space-y-6">
+
+  <!-- Hero + gauge -->
+  <section class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+    <div class="lg:col-span-7 space-y-2">
+      <p class="font-label text-primary uppercase tracking-[.2em] font-bold text-[11px]">Telemetria in tempo reale</p>
+      <h1 class="font-headline text-4xl font-extrabold tracking-tight text-on-surface leading-tight">Vigna <span class="text-primary">Connessa</span></h1>
+      <p id="last-update" class="text-on-surface-variant text-sm">In attesa del primo dato…</p>
+    </div>
+    <div class="lg:col-span-5">
+      <div class="glass-card p-5 rounded-xl shadow-sm flex items-center gap-4">
+        <div class="relative h-16 w-16 flex-shrink-0 flex items-center justify-center">
+          <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" fill="none" r="28" stroke="#d1e9db" stroke-width="6"/>
+            <circle id="eff-circle" cx="32" cy="32" fill="none" r="28" stroke="#4c7a63"
+              stroke-dasharray="175.9" stroke-dashoffset="175.9" stroke-linecap="round" stroke-width="6"
+              style="transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1),stroke .6s"/>
+          </svg>
+          <span id="val-eff" class="font-headline font-bold text-sm text-primary">--%</span>
+        </div>
+        <div>
+          <p class="font-label text-[11px] uppercase tracking-widest text-primary font-bold">Indice salute</p>
+          <p id="eff-desc" class="text-on-surface-variant text-sm mt-0.5">--</p>
+          <p id="eff-detail" class="text-on-surface-variant/60 text-[11px] mt-0.5"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Actions row -->
+  <div class="flex items-center gap-3 flex-wrap">
+    <button id="btn-refresh" class="glass-card flex items-center gap-2 px-5 py-2.5 rounded-full hover:bg-white/90 active:scale-95 transition-all border border-primary/10 group">
+      <span id="refresh-icon" class="material-symbols-outlined text-primary text-lg transition-transform duration-500 group-hover:rotate-180">refresh</span>
+      <span class="text-[11px] font-bold uppercase tracking-widest text-primary">Aggiorna</span>
+    </button>
+    <div id="no-config-banner" class="hidden flex-1 glass-card border border-amber-300/40 px-4 py-2.5 rounded-full flex items-center gap-2">
+      <span class="material-symbols-outlined text-amber-500 text-base">settings</span>
+      <span class="text-xs text-on-surface-variant">Configura MQTT</span>
+      <button onclick="showTab('config')" class="ml-auto text-[11px] font-bold text-primary uppercase tracking-wider">Vai →</button>
+    </div>
+  </div>
+
+  <!-- 3×2 sensor grid -->
+  <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+
+    <!-- Temperatura aria -->
+    <div class="sensor-card glass-card p-5 rounded-xl shadow-sm flex flex-col justify-between min-h-[11rem]">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">thermostat</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Temp. aria</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-temp-aria" class="text-4xl font-extrabold text-on-surface tracking-tighter">--</span>
+          <span class="text-lg font-medium text-primary">°C</span>
+        </div>
+        <span id="bdg-temp-aria" class="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-container text-primary">--</span>
+      </div>
+      <div class="mt-3">
+        <p class="text-[9px] uppercase tracking-widest font-bold text-on-surface-variant/50 mb-1">Ultime 6</p>
+        <div class="w-full h-8 flex items-end gap-0.5" data-spark="temp_aria">
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Umidità aria -->
+    <div class="sensor-card glass-card p-5 rounded-xl shadow-sm flex flex-col justify-between min-h-[11rem]">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">humidity_percentage</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Umid. aria</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-umidita-aria" class="text-4xl font-extrabold text-on-surface tracking-tighter">--</span>
+          <span class="text-lg font-medium text-primary">%</span>
+        </div>
+      </div>
+      <div class="mt-3">
+        <p class="text-[9px] uppercase tracking-widest font-bold text-on-surface-variant/50 mb-1">Ultime 6</p>
+        <div class="w-full h-8 flex items-end gap-0.5" data-spark="umidita_aria">
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pressione -->
+    <div class="sensor-card glass-card p-5 rounded-xl shadow-sm flex flex-col justify-between min-h-[11rem]">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">speed</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Pressione</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-pressione" class="text-3xl font-extrabold text-on-surface tracking-tighter">----</span>
+          <span class="text-sm font-medium text-on-surface-variant ml-1">hPa</span>
+        </div>
+      </div>
+      <div class="mt-3 border-t border-primary-container/30 pt-3 flex items-center justify-between">
+        <span id="pressure-icon" class="material-symbols-outlined text-primary text-xl">trending_flat</span>
+        <span id="pressure-trend" class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">--</span>
+      </div>
+    </div>
+
+    <!-- Luminosità -->
+    <div class="sensor-card glass-card p-5 rounded-xl shadow-sm flex flex-col justify-between min-h-[11rem]">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">wb_sunny</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Luminosità</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-lux" class="text-3xl font-extrabold text-on-surface tracking-tighter">----</span>
+          <span class="text-sm font-medium text-on-surface-variant ml-1">lux</span>
+        </div>
+        <span id="bdg-lux" class="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-container text-primary">--</span>
+      </div>
+      <div class="mt-3">
+        <p class="text-[9px] uppercase tracking-widest font-bold text-on-surface-variant/50 mb-1">Ultime 6</p>
+        <div class="w-full h-8 flex items-end gap-0.5" data-spark="lux">
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bagnatura fogliare -->
+    <div class="sensor-card glass-card p-5 rounded-xl shadow-sm flex flex-col justify-between min-h-[11rem]">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">water_drop</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Bagnatura</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-bagnatura" class="text-4xl font-extrabold text-on-surface tracking-tighter">--</span>
+          <span class="text-lg font-medium text-primary">%</span>
+        </div>
+        <span id="bdg-bagnatura" class="inline-block mt-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">--</span>
+      </div>
+      <div class="mt-3">
+        <p class="text-[9px] uppercase tracking-widest font-bold text-on-surface-variant/50 mb-1">Ultime 6</p>
+        <div class="w-full h-8 flex items-end gap-0.5" data-spark="bagnatura">
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Temperatura suolo -->
+    <div class="sensor-card glass-card p-5 rounded-xl shadow-sm flex flex-col justify-between min-h-[11rem]">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">device_thermostat</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Temp. suolo</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-temp-suolo" class="text-4xl font-extrabold text-on-surface tracking-tighter">--</span>
+          <span class="text-lg font-medium text-primary-container">°C</span>
+        </div>
+      </div>
+      <div class="mt-3">
+        <p class="text-[9px] uppercase tracking-widest font-bold text-on-surface-variant/50 mb-1">Ultime 6</p>
+        <div class="w-full h-8 flex items-end gap-0.5" data-spark="temp_suolo">
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+          <div class="spark-bar flex-1 bg-primary/20 rounded-t-sm" style="height:40%"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /grid -->
+
+  <!-- Umidità suolo — wide -->
+  <div class="sensor-card glass-card p-6 rounded-xl shadow-sm">
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <div class="flex items-center gap-1.5 text-primary mb-2">
+          <span class="material-symbols-outlined text-[1.1rem]">opacity</span>
+          <span class="font-label text-[10px] uppercase tracking-widest font-bold">Umidità suolo</span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="val-umidita-suolo" class="text-4xl font-extrabold text-on-surface tracking-tighter">--</span>
+          <span class="text-lg font-medium text-primary">%</span>
+        </div>
+      </div>
+      <span id="bdg-umidita-suolo" class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mt-1">--</span>
+    </div>
+    <div class="space-y-1.5">
+      <div class="w-full h-2.5 bg-surface-container-high rounded-full overflow-hidden">
+        <div id="soil-bar" class="progress-fill h-full bg-primary rounded-full" style="width:0%"></div>
+      </div>
+      <div class="flex justify-between text-[9px] uppercase tracking-widest text-on-surface-variant/50 font-bold">
+        <span>0%</span><span>Ottimale 55–80%</span><span>100%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Insights -->
+  <section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+    <!-- Trend chart -->
+    <div class="lg:col-span-2 glass-card p-6 rounded-xl shadow-sm overflow-hidden">
+      <h3 class="text-lg font-bold text-on-surface tracking-tight">Umidità suolo — trend</h3>
+      <p class="text-on-surface-variant text-xs mt-0.5 mb-4">Ultime 24 rilevazioni (~6 ore)</p>
+      <div class="relative h-28 w-full">
+        <svg id="trend-svg" class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 400 112">
+          <defs>
+            <linearGradient id="grad1" x1="0%" x2="0%" y1="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#4c7a63;stop-opacity:.15"/>
+              <stop offset="100%" style="stop-color:#4c7a63;stop-opacity:0"/>
+            </linearGradient>
+          </defs>
+          <path id="t-fill" d="" fill="url(#grad1)"/>
+          <path id="t-line" d="" fill="none" stroke="#4c7a63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="flex justify-between mt-1">
+        <span class="text-[9px] text-on-surface-variant font-bold uppercase tracking-widest">−6h</span>
+        <span class="text-[9px] text-on-surface-variant font-bold uppercase tracking-widest">−4h</span>
+        <span class="text-[9px] text-on-surface-variant font-bold uppercase tracking-widest">−2h</span>
+        <span class="text-[9px] text-on-surface-variant font-bold uppercase tracking-widest">Ora</span>
+      </div>
+    </div>
+
+    <!-- Risk card -->
+    <div id="risk-card" class="bg-primary p-6 rounded-xl flex flex-col justify-between text-white shadow-lg overflow-hidden relative">
+      <div class="absolute -right-6 -top-6 opacity-10">
+        <span class="material-symbols-outlined" style="font-size:7rem">coronavirus</span>
+      </div>
+      <div>
+        <span class="bg-white/20 text-[10px] font-bold px-3 py-1 rounded-full tracking-wider uppercase">Rischio peronospora</span>
+        <div class="mt-5"><span id="risk-level" class="text-3xl font-extrabold">--</span></div>
+        <p id="risk-text" class="text-white/75 text-xs mt-2.5 leading-relaxed">In attesa dei dati…</p>
+      </div>
+      <div class="mt-5 flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-full border border-white/30 flex items-center justify-center flex-shrink-0">
+          <span class="material-symbols-outlined text-sm">schedule</span>
+        </div>
+        <span id="risk-ts" class="text-xs font-bold text-white/60">--</span>
+      </div>
+    </div>
+
+  </section>
+</div><!-- /dashboard -->
+
+<!-- ════ STORICO ════ -->
+<div id="tab-storico" class="tab-content px-5 pt-5 space-y-4">
+  <div>
+    <h2 class="text-xl font-bold text-on-surface">Storico letture</h2>
+    <p class="text-on-surface-variant text-sm mt-0.5"><span id="hist-count">0</span> rilevazioni in memoria (max 48 · ~12h)</p>
+  </div>
+  <div id="history-list" class="space-y-3">
+    <div class="glass-card p-5 rounded-xl text-center text-on-surface-variant text-sm">Nessun dato storico ancora.</div>
+  </div>
+</div>
+
+<!-- ════ ALERT ════ -->
+<div id="tab-alert" class="tab-content px-5 pt-5 space-y-4">
+  <h2 class="text-xl font-bold text-on-surface">Alert agronomici</h2>
+  <div id="alert-list" class="space-y-3"></div>
+  <div class="glass-card p-5 rounded-xl space-y-3">
+    <h3 class="font-bold text-on-surface text-sm">Soglie monitorate</h3>
+    <div class="space-y-2 text-xs text-on-surface-variant">
+      <div class="flex justify-between"><span>Peronospora ALTA</span><span class="font-bold text-red-500">bagnatura &gt;70% + temp 10–30°C</span></div>
+      <div class="flex justify-between"><span>Peronospora MEDIA</span><span class="font-bold text-amber-500">bagnatura &gt;40%</span></div>
+      <div class="flex justify-between"><span>Umidità suolo BASSA</span><span class="font-bold text-amber-500">&lt;55%</span></div>
+      <div class="flex justify-between"><span>Temperatura ALTA</span><span class="font-bold text-red-500">&gt;35°C</span></div>
+      <div class="flex justify-between"><span>Temperatura BASSA</span><span class="font-bold text-blue-500">&lt;5°C (gelo)</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ CONFIG ════ -->
+<div id="tab-config" class="tab-content px-5 pt-5 space-y-4">
+  <div>
+    <h2 class="text-xl font-bold text-on-surface">Impostazioni</h2>
+    <p class="text-on-surface-variant text-sm mt-0.5">Configurazione MQTT e identità vigneto</p>
+  </div>
+  <div class="glass-card p-5 rounded-xl border border-primary/15 space-y-1.5">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary text-base">info</span>
+      <span class="font-bold text-on-surface text-sm">Setup HiveMQ Cloud (gratuito)</span>
+    </div>
+    <ol class="text-on-surface-variant text-xs space-y-0.5 list-decimal ml-5 leading-relaxed">
+      <li>Account su <strong>console.hivemq.cloud</strong></li>
+      <li>Crea cluster → copia hostname</li>
+      <li>Access Management → crea utente</li>
+      <li>Incolla qui e salva</li>
+    </ol>
+  </div>
+  <div class="glass-card p-5 rounded-xl space-y-4">
+    <div>
+      <label class="text-[11px] font-bold uppercase tracking-wider text-primary block mb-1.5">Nome vigneto</label>
+      <input type="text" id="cfg-vigneto" class="cfg-input" placeholder="Es. Vigneto Collio Nord">
+    </div>
+    <div>
+      <label class="text-[11px] font-bold uppercase tracking-wider text-primary block mb-1.5">Broker hostname</label>
+      <input type="text" id="cfg-broker" class="cfg-input" placeholder="xxxxx.s1.eu.hivemq.cloud">
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="text-[11px] font-bold uppercase tracking-wider text-primary block mb-1.5">Porta WS TLS</label>
+        <input type="number" id="cfg-port" class="cfg-input" value="8884">
+      </div>
+      <div>
+        <label class="text-[11px] font-bold uppercase tracking-wider text-primary block mb-1.5">Topic</label>
+        <input type="text" id="cfg-topic" class="cfg-input" placeholder="landbox/landbox_01/data">
+      </div>
+    </div>
+    <div>
+      <label class="text-[11px] font-bold uppercase tracking-wider text-primary block mb-1.5">Username</label>
+      <input type="text" id="cfg-username" class="cfg-input" autocomplete="username">
+    </div>
+    <div>
+      <label class="text-[11px] font-bold uppercase tracking-wider text-primary block mb-1.5">Password</label>
+      <input type="password" id="cfg-password" class="cfg-input" autocomplete="current-password">
+    </div>
+    <button id="save-cfg" class="w-full bg-primary text-white py-3.5 rounded-xl font-bold text-sm tracking-wider hover:bg-primary/90 active:scale-[.98] transition-all shadow-sm">
+      Salva e connetti
+    </button>
+  </div>
+  <div class="glass-card p-4 rounded-xl space-y-2">
+    <p class="text-xs font-bold text-on-surface">Valori per config.h (firmware ESP32)</p>
+    <div>
+      <span class="text-[10px] text-on-surface-variant">MQTT_SERVER</span>
+      <code id="disp-broker" class="block text-xs text-primary bg-surface-container px-2 py-1 rounded mt-0.5 truncate">--</code>
+    </div>
+    <div>
+      <span class="text-[10px] text-on-surface-variant">Topic</span>
+      <code id="disp-topic" class="block text-xs text-primary bg-surface-container px-2 py-1 rounded mt-0.5 truncate">--</code>
+    </div>
+  </div>
+  <button id="btn-reset" class="w-full glass-card py-3 rounded-xl text-red-400 text-xs font-bold uppercase tracking-wider border border-red-200/40">
+    Cancella dati e storico locale
+  </button>
+</div>
+
+</main>
+
+<!-- BOTTOM NAV -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-3xl bg-white/85 backdrop-blur-3xl shadow-[0_-8px_40px_-12px_rgba(76,122,99,.18)] nav-safe">
+  <div class="flex justify-around items-center px-4 pt-3 pb-1">
+    <button id="nav-dashboard" onclick="showTab('dashboard')" class="flex flex-col items-center gap-0.5 bg-primary-container text-primary rounded-xl px-4 py-2 transition-all">
+      <span class="material-symbols-outlined text-[1.3rem]">grid_view</span>
+      <span class="text-[9px] uppercase tracking-widest font-bold">Stato</span>
+    </button>
+    <button id="nav-storico" onclick="showTab('storico')" class="flex flex-col items-center gap-0.5 text-on-surface-variant/50 px-4 py-2 hover:text-primary transition-colors">
+      <span class="material-symbols-outlined text-[1.3rem]">analytics</span>
+      <span class="text-[9px] uppercase tracking-widest font-bold">Storico</span>
+    </button>
+    <button id="nav-alert" onclick="showTab('alert')" class="flex flex-col items-center gap-0.5 text-on-surface-variant/50 px-4 py-2 hover:text-primary transition-colors relative">
+      <span class="material-symbols-outlined text-[1.3rem]">notifications</span>
+      <span class="text-[9px] uppercase tracking-widest font-bold">Alert</span>
+      <span id="alert-dot" class="hidden absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+    </button>
+    <button id="nav-config" onclick="showTab('config')" class="flex flex-col items-center gap-0.5 text-on-surface-variant/50 px-4 py-2 hover:text-primary transition-colors">
+      <span class="material-symbols-outlined text-[1.3rem]">settings</span>
+      <span class="text-[9px] uppercase tracking-widest font-bold">Config</span>
+    </button>
+  </div>
+</nav>
+
+<script>
+// ══ CONSTANTS ══════════════════════════════════════════
+const CFG_KEY  = 'ke_cfg_v2';
+const HIST_KEY = 'ke_hist_v2';
+const LAST_KEY = 'ke_last_v2';
+const MAX_HIST = 48;
+const DEF_CFG  = { broker:'',port:8884,username:'',password:'',topic:'landbox/landbox_01/data',vigneto:'KestrelEye' };
+
+// ══ STATE ══════════════════════════════════════════════
+let cfg      = { ...DEF_CFG, ...JSON.parse(localStorage.getItem(CFG_KEY) ||'{}') };
+let hist     = JSON.parse(localStorage.getItem(HIST_KEY)||'[]');
+let lastData = JSON.parse(localStorage.getItem(LAST_KEY)||'null');
+let client   = null;
+
+// ══ RANGES (7 parametri MVP) ═══════════════════════════
+const R = {
+  temp_aria:     [10,  32  ],
+  umidita_aria:  [40,  85  ],
+  bagnatura:     [0,   30  ],   // ≤30 = ok
+  temp_suolo:    [12,  25  ],
+  umidita_suolo: [55,  80  ],
+};
+const inR = (v, k) => {
+  if (!R[k] || v==null) return true;
+  if (k==='bagnatura') return v <= R[k][1];
+  return v >= R[k][0] && v <= R[k][1];
+};
+const luxLabel = v => v<100?'Buio':v<1000?'Coperto':v<10000?'Soleggiato':'Piena luce';
+
+// ══ RISK ═══════════════════════════════════════════════
+const risk = d => {
+  if (!d) return { lv:'--', sc:0, col:'#4c7a63' };
+  const w = d.bagnatura??0, t = d.temp_aria??0, tok = t>=10&&t<=30;
+  if (w>70&&tok) return { lv:'Alto',  sc:3, col:'#dc2626' };
+  if (w>40)      return { lv:'Medio', sc:2, col:'#d97706' };
+  return               { lv:'Basso', sc:1, col:'#4c7a63' };
+};
+
+// ══ EFFICIENCY ═════════════════════════════════════════
+const eff = d => {
+  if (!d) return { pct:0, ok:0 };
+  const ks = ['temp_aria','umidita_aria','bagnatura','temp_suolo','umidita_suolo'];
+  const ok = ks.filter(k => inR(d[k], k)).length;
+  return { pct: Math.round(ok/ks.length*100), ok, tot:ks.length };
+};
+
+// ══ HISTORY ════════════════════════════════════════════
+const pushHist = d => {
+  hist.push({...d, _r:Date.now()});
+  if (hist.length>MAX_HIST) hist = hist.slice(-MAX_HIST);
+  localStorage.setItem(HIST_KEY, JSON.stringify(hist));
+};
+const sparkVals = (k, n=6) => hist.slice(-n).map(h => parseFloat(h[k])||0);
+
+// ══ DOM HELPERS ════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const set = (id,v) => { const e=$(id); if(e) e.textContent=v; };
+const setW = (id,p) => { const e=$(id); if(e) e.style.width=Math.min(100,Math.max(0,p))+'%'; };
+const anim = (id,v) => {
+  const e=$(id); if(!e) return;
+  e.classList.remove('val-in'); void e.offsetWidth;
+  e.textContent=v; e.classList.add('val-in');
+};
+const r0 = v => v!=null ? Math.round(v) : '--';
+const r1 = v => v!=null ? (Math.round(v*10)/10).toFixed(1) : '--';
+
+const fmtTs = ts => {
+  if(!ts||ts==='unknown') return '--';
+  try { return new Date(ts).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+  catch { return ts; }
+};
+
+// ══ SPARKLINES ═════════════════════════════════════════
+const SPARK_KEYS = ['temp_aria','umidita_aria','lux','bagnatura','temp_suolo'];
+const renderSparks = () => {
+  SPARK_KEYS.forEach(k => {
+    const vals = sparkVals(k,6);
+    if (!vals.length) return;
+    const el = document.querySelector(`[data-spark="${k}"]`);
+    if (!el) return;
+    const bars = el.querySelectorAll('.spark-bar');
+    const mx = Math.max(...vals), mn = Math.min(...vals), rng=(mx-mn)||1;
+    bars.forEach((b,i) => {
+      const v = vals[i]||0;
+      b.style.height     = Math.max(8,((v-mn)/rng)*80+10)+'%';
+      b.style.background = inR(v,k) ? '#4c7a63' : '#ef4444';
+      b.style.opacity    = (.3+(i/bars.length)*.7).toFixed(2);
+    });
+  });
+};
+
+// ══ TREND CHART ════════════════════════════════════════
+const renderTrend = () => {
+  const vals = sparkVals('umidita_suolo',24);
+  if (vals.length<2) return;
+  const W=400,H=96,mx=Math.max(...vals,80),mn=Math.min(...vals,40),rng=(mx-mn)||1;
+  const pts = vals.map((v,i)=>[
+    (i/(vals.length-1))*W,
+    H-((v-mn)/rng)*H*.84-6
+  ]);
+  const line = pts.map((p,i)=>`${i?'L':'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const fill = line+` L${pts[pts.length-1][0].toFixed(1)},${H} L0,${H} Z`;
+  $('t-line')?.setAttribute('d',line);
+  $('t-fill')?.setAttribute('d',fill);
+};
+
+// ══ DASHBOARD UPDATE ═══════════════════════════════════
+const update = d => {
+  if (!d) return;
+  lastData = d;
+  localStorage.setItem(LAST_KEY, JSON.stringify(d));
+  pushHist(d);
+
+  // Aria
+  anim('val-temp-aria',  r1(d.temp_aria));
+  anim('val-umidita-aria', r0(d.umidita_aria));
+  const ta = d.temp_aria??0;
+  set('bdg-temp-aria', ta>32?'Caldo':ta<10?'Freddo':'Normale');
+
+  // Atmosfera
+  anim('val-pressione', r0(d.pressione));
+  const prevP = hist.length>1 ? (hist[hist.length-2].pressione||0) : d.pressione;
+  const dp    = (d.pressione||0)-(prevP||0);
+  set('pressure-trend', Math.abs(dp)<.5?'Stabile':dp>0?'In aumento':'In calo');
+  const pi = $('pressure-icon');
+  if(pi) pi.textContent = Math.abs(dp)<.5?'trending_flat':dp>0?'trending_up':'trending_down';
+
+  const lx = Math.round(d.lux||0);
+  anim('val-lux', lx.toLocaleString('it-IT'));
+  set('bdg-lux', luxLabel(lx));
+
+  // Foglie
+  anim('val-bagnatura', r0(d.bagnatura));
+  const w = d.bagnatura??0;
+  set('bdg-bagnatura', w>70?'Alto rischio':w>40?'Attenzione':'Basso rischio');
+
+  // Suolo
+  anim('val-temp-suolo',    r1(d.temp_suolo));
+  anim('val-umidita-suolo', r0(d.umidita_suolo));
+  setW('soil-bar', d.umidita_suolo||0);
+  const sm = d.umidita_suolo??0;
+  set('bdg-umidita-suolo', sm>=55&&sm<=80?'Ottimale':sm<55?'Bassa':'Alta');
+
+  // Efficiency
+  const e = eff(d);
+  anim('val-eff', e.pct+'%');
+  set('eff-desc',   e.pct>=80?'Ottimo':e.pct>=60?'Buono':'Da migliorare');
+  set('eff-detail', `${e.ok}/${e.tot} parametri ok`);
+  const circ = $('eff-circle');
+  if(circ) {
+    circ.style.strokeDashoffset = (2*Math.PI*28*(1-e.pct/100)).toFixed(1);
+    circ.style.stroke = e.pct>=80?'#4c7a63':e.pct>=60?'#d97706':'#dc2626';
+  }
+
+  // Risk
+  const rk = risk(d);
+  set('risk-level', rk.lv);
+  set('risk-ts',    'Aggiornato: '+fmtTs(d.ts));
+  const ww=r0(d.bagnatura), tt=r1(d.temp_aria);
+  set('risk-text',
+    rk.sc===3 ? `⚠ Bagnatura ${ww}% con ${tt}°C: condizioni favorevoli alla peronospora.` :
+    rk.sc===2 ? `Bagnatura ${ww}%: monitorare. Se persiste con 15–25°C il rischio aumenta.` :
+                `Bagnatura ${ww}% — condizioni sfavorevoli alla peronospora.`
+  );
+  const rc=$('risk-card');
+  if(rc) rc.style.background = rk.col;
+
+  set('last-update', 'Aggiornato: '+fmtTs(d.ts));
+  renderSparks();
+  renderTrend();
+  updateAlerts(d, rk);
+  updateHist();
+};
+
+// ══ ALERTS ════════════════════════════════════════════
+const updateAlerts = (d, rk) => {
+  const al = [];
+  if(rk.sc===3) al.push({c:'red',  i:'warning',    m:`Rischio peronospora ALTO: bagnatura ${r0(d.bagnatura)}%, temp ${r1(d.temp_aria)}°C`});
+  if(rk.sc===2) al.push({c:'amber',i:'info',        m:`Rischio peronospora MEDIO: bagnatura ${r0(d.bagnatura)}%`});
+  if((d.umidita_suolo??0)<55) al.push({c:'amber',i:'water_drop',m:`Umidità suolo bassa: ${r0(d.umidita_suolo)}% (ottimale 55–80%)`});
+  if((d.temp_aria??0)>35)     al.push({c:'red',  i:'thermostat', m:`Temperatura aria alta: ${r1(d.temp_aria)}°C`});
+  if((d.temp_aria??0)<5)      al.push({c:'blue', i:'ac_unit',    m:`Temperatura aria bassa: ${r1(d.temp_aria)}°C — rischio gelo`});
+
+  $('alert-dot')?.classList.toggle('hidden', al.length===0);
+
+  const lst=$('alert-list');
+  if(!lst) return;
+  if(!al.length) {
+    lst.innerHTML=`<div class="glass-card p-5 rounded-xl text-center text-on-surface-variant text-sm">✓ Nessun alert. Parametri nei limiti.</div>`;
+    return;
+  }
+  const cm={red:'bg-red-50 border-red-200 text-red-700',amber:'bg-amber-50 border-amber-200 text-amber-700',blue:'bg-blue-50 border-blue-200 text-blue-700'};
+  lst.innerHTML=al.map(a=>`
+    <div class="glass-card p-4 rounded-xl flex items-center gap-3 border ${cm[a.c]}">
+      <span class="material-symbols-outlined text-xl flex-shrink-0">${a.i}</span>
+      <p class="text-sm font-medium">${a.m}</p>
+    </div>`).join('');
+};
+
+// ══ HISTORY TAB ═══════════════════════════════════════
+const updateHist = () => {
+  set('hist-count', hist.length);
+  const lst=$('history-list');
+  if(!lst||!hist.length) return;
+  const recent=[...hist].reverse().slice(0,20);
+  const rk2 = d => { const r=risk(d); return r.sc===3?'⚠ Alto':r.sc===2?'⚡ Medio':'✓ OK'; };
+  lst.innerHTML=recent.map(h=>`
+    <div class="glass-card p-4 rounded-xl">
+      <div class="flex justify-between items-center mb-2.5">
+        <span class="text-xs font-bold text-primary uppercase tracking-wider">${fmtTs(h.ts)}</span>
+        <span class="text-[10px] text-on-surface-variant font-bold">${rk2(h)}</span>
+      </div>
+      <div class="grid grid-cols-4 gap-2 text-xs">
+        <div><span class="text-on-surface-variant/70 block text-[10px]">T.aria</span><strong>${r1(h.temp_aria)}°C</strong></div>
+        <div><span class="text-on-surface-variant/70 block text-[10px]">U.aria</span><strong>${r0(h.umidita_aria)}%</strong></div>
+        <div><span class="text-on-surface-variant/70 block text-[10px]">Pres.</span><strong>${r0(h.pressione)}</strong></div>
+        <div><span class="text-on-surface-variant/70 block text-[10px]">Lux</span><strong>${Math.round(h.lux||0).toLocaleString('it-IT')}</strong></div>
+        <div><span class="text-on-surface-variant/70 block text-[10px]">Bagn.</span><strong>${r0(h.bagnatura)}%</strong></div>
+        <div><span class="text-on-surface-variant/70 block text-[10px]">T.suolo</span><strong>${r1(h.temp_suolo)}°C</strong></div>
+        <div class="col-span-2"><span class="text-on-surface-variant/70 block text-[10px]">U.suolo</span><strong>${r0(h.umidita_suolo)}%</strong></div>
+      </div>
+    </div>`).join('');
+};
+
+// ══ CONN STATUS ═══════════════════════════════════════
+const setConn = s => {
+  const m={connecting:{c:'bg-amber-400 pulsing',l:'Conn…'},connected:{c:'bg-green-400',l:'Live'},disconnected:{c:'bg-red-400',l:'Offline'},error:{c:'bg-red-500',l:'Errore'}};
+  const v=m[s]||{c:'bg-gray-300 pulsing',l:'--'};
+  const d=$('conn-dot'), lb=$('conn-label');
+  if(d) d.className=`w-2 h-2 rounded-full ${v.c}`;
+  if(lb) lb.textContent=v.l;
+};
+
+// ══ MQTT ═══════════════════════════════════════════════
+const connect = () => {
+  if(!cfg.broker||!cfg.username||!cfg.password) {
+    setConn('disconnected');
+    $('no-config-banner')?.classList.remove('hidden');
+    return;
+  }
+  $('no-config-banner')?.classList.add('hidden');
+  if(client) { try{client.end(true);}catch(e){} client=null; }
+  setConn('connecting');
+  client = mqtt.connect(`wss://${cfg.broker}:${cfg.port}/mqtt`,{
+    username:cfg.username, password:cfg.password,
+    clientId:'ke_'+Math.random().toString(16).slice(2,10),
+    clean:true, connectTimeout:12000, reconnectPeriod:10000, keepalive:60
+  });
+  client.on('connect', ()=>{ setConn('connected'); client.subscribe(cfg.topic,{qos:1}); });
+  client.on('message', (_,p)=>{ try{update(JSON.parse(p.toString()));}catch(e){console.error(e);} });
+  client.on('error',     ()=> setConn('error'));
+  client.on('close',     ()=> setConn('disconnected'));
+  client.on('reconnect', ()=> setConn('connecting'));
+};
+
+// ══ TAB NAV ════════════════════════════════════════════
+const TABS=['dashboard','storico','alert','config'];
+const showTab = name => {
+  TABS.forEach(t => {
+    $(`tab-${t}`)?.classList.toggle('active', t===name);
+    const b=$(`nav-${t}`);
+    if(!b) return;
+    b.className = t===name
+      ? 'flex flex-col items-center gap-0.5 bg-primary-container text-primary rounded-xl px-4 py-2 transition-all'
+      : 'flex flex-col items-center gap-0.5 text-on-surface-variant/50 px-4 py-2 hover:text-primary transition-colors';
+  });
+  if(name==='config') loadCfgForm();
+};
+
+// ══ CONFIG ═════════════════════════════════════════════
+const loadCfgForm = () => {
+  ['broker','port','username','password','topic','vigneto'].forEach(k => {
+    const e=$(`cfg-${k}`); if(e) e.value=cfg[k]||'';
+  });
+  set('disp-broker', cfg.broker||'--');
+  set('disp-topic',  cfg.topic||'--');
+};
+const saveCfg = () => {
+  ['broker','port','username','password','topic','vigneto'].forEach(k => {
+    const e=$(`cfg-${k}`); if(e) cfg[k]=e.value.trim();
+  });
+  cfg.port=parseInt(cfg.port)||8884;
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  set('header-vigneto', cfg.vigneto||'KestrelEye');
+  connect();
+  showTab('dashboard');
+};
+
+// ══ INIT ═══════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+  // Clock
+  const tick = () => set('header-time', new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));
+  tick(); setInterval(tick, 30000);
+
+  set('header-vigneto', cfg.vigneto||'KestrelEye');
+  if(lastData) update(lastData);
+  connect();
+  if(!cfg.broker) showTab('config');
+
+  // Refresh
+  $('btn-refresh')?.addEventListener('click', () => {
+    if(client?.connected) {
+      client.unsubscribe(cfg.topic, ()=> client.subscribe(cfg.topic,{qos:1}));
+    } else { connect(); }
+    const ic=$('refresh-icon');
+    if(ic){ ic.style.transform='rotate(360deg)'; setTimeout(()=>ic.style.transform='',600); }
+  });
+
+  $('save-cfg')?.addEventListener('click', saveCfg);
+
+  $('btn-reset')?.addEventListener('click', ()=>{
+    if(!confirm('Cancellare tutti i dati locali?')) return;
+    localStorage.clear(); location.reload();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#4c7a63"/>
+  <!-- Drone silhouette simplified -->
+  <circle cx="256" cy="220" r="42" fill="none" stroke="#d1e9db" stroke-width="14"/>
+  <circle cx="256" cy="220" r="18" fill="#d1e9db"/>
+  <!-- Arms -->
+  <line x1="214" y1="178" x2="148" y2="148" stroke="#d1e9db" stroke-width="12" stroke-linecap="round"/>
+  <line x1="298" y1="178" x2="364" y2="148" stroke="#d1e9db" stroke-width="12" stroke-linecap="round"/>
+  <line x1="214" y1="262" x2="148" y2="292" stroke="#d1e9db" stroke-width="12" stroke-linecap="round"/>
+  <line x1="298" y1="262" x2="364" y2="292" stroke="#d1e9db" stroke-width="12" stroke-linecap="round"/>
+  <!-- Propellers -->
+  <ellipse cx="148" cy="148" rx="38" ry="10" fill="#d1e9db" opacity="0.8"/>
+  <ellipse cx="364" cy="148" rx="38" ry="10" fill="#d1e9db" opacity="0.8"/>
+  <ellipse cx="148" cy="292" rx="38" ry="10" fill="#d1e9db" opacity="0.8"/>
+  <ellipse cx="364" cy="292" rx="38" ry="10" fill="#d1e9db" opacity="0.8"/>
+  <!-- Signal waves below -->
+  <path d="M200 340 Q256 320 312 340" fill="none" stroke="#d1e9db" stroke-width="8" stroke-linecap="round" opacity="0.5"/>
+  <path d="M172 368 Q256 340 340 368" fill="none" stroke="#d1e9db" stroke-width="8" stroke-linecap="round" opacity="0.3"/>
+</svg>
