@@ -1,148 +1,160 @@
-"""Inference pipeline for YOLO object detection."""
+"""
+src/pipeline/inference.py
+--------------------------
+Runs YOLOv8 batch inference on a folder of images and returns raw results.
+
+This module handles only the inference step.
+Result storage -> src/pipeline/export.py
+Image utils   -> src/utils/image.py
+"""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import logging
 from pathlib import Path
-from typing import Any
 
-from PIL import Image
+from ultralytics import YOLO
+from ultralytics.engine.results import Results
 
-from src.models.model_loader import ModelConfig, create_model_from_config
+logger = logging.getLogger(__name__)
 
-
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
-
-
-@dataclass(slots=True)
-class Detection:
-	"""Normalized prediction output for one bounding box."""
-
-	image_path: str
-	class_id: int
-	class_name: str
-	confidence: float
-	x1: float
-	y1: float
-	x2: float
-	y2: float
-	width: int
-	height: int
-
-	def to_dict(self) -> dict[str, Any]:
-		return asdict(self)
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
-def _is_image(path: Path) -> bool:
-	return path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+def collect_images(source: str | Path) -> list[Path]:
+    """
+    Recursively collect all supported image files under source.
+
+    Parameters
+    ----------
+    source : str | Path
+        A directory or a single image file.
+
+    Returns
+    -------
+    list[Path]
+        Sorted list of image paths.
+
+    Raises
+    ------
+    FileNotFoundError  If source does not exist.
+    ValueError         If source is a directory with no supported images,
+                       or a file with an unsupported extension.
+    """
+    source = Path(source)
+
+    if not source.exists():
+        raise FileNotFoundError(f"Source path not found: {source}")
+
+    if source.is_file():
+        if source.suffix.lower() not in IMAGE_EXTENSIONS:
+            raise ValueError(f"Unsupported file type: {source.suffix}")
+        return [source]
+
+    images = sorted(
+        p for p in source.rglob("*")
+        if p.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+    if not images:
+        raise ValueError(
+            f"No images found under {source}.\n"
+            f"Supported extensions: {sorted(IMAGE_EXTENSIONS)}"
+        )
+
+    logger.info("Found %d images in %s", len(images), source)
+    return images
 
 
-def _extract_detections(result: Any, image_path: Path, image_size: tuple[int, int]) -> list[Detection]:
-	detections: list[Detection] = []
-	raw_names = result.names or {}
-	if isinstance(raw_names, dict):
-		names_map = raw_names
-	elif isinstance(raw_names, list):
-		names_map = {idx: name for idx, name in enumerate(raw_names)}
-	else:
-		names_map = {}
-	width, height = image_size
+def run_inference(
+    model: YOLO,
+    images: list[Path],
+    conf: float = 0.45,
+    iou: float = 0.50,
+    imgsz: int = 640,
+    device: str = "mps",
+    verbose: bool = False,
+) -> list[Results]:
+    """
+    Run YOLOv8 inference on a list of image paths.
 
-	if result.boxes is None:
-		return detections
+    Parameters
+    ----------
+    model : YOLO
+        Loaded model from src.models.loader.get_model().
+    images : list[Path]
+        Output of collect_images().
+    conf : float
+        Minimum confidence threshold to keep a detection.
+    iou : float
+        IoU threshold for Non-Maximum Suppression.
+    imgsz : int
+        Input resolution. Must match the resolution used during training.
+    device : str
+        "mps" (Apple Silicon), "cpu", or "0" (CUDA).
+    verbose : bool
+        Print per-image stats. Keep False in normal use.
 
-	for box in result.boxes:
-		cls = int(box.cls[0].item())
-		conf = float(box.conf[0].item())
-		x1, y1, x2, y2 = (float(value) for value in box.xyxy[0].tolist())
-		detections.append(
-			Detection(
-				image_path=str(image_path),
-				class_id=cls,
-			class_name=str(names_map.get(cls, str(cls))),
-				confidence=conf,
-				x1=x1,
-				y1=y1,
-				x2=x2,
-				y2=y2,
-				width=width,
-				height=height,
-			)
-		)
+    Returns
+    -------
+    list[Results]
+        One Results object per input image. Each exposes:
+            result.path        -- str, source image path
+            result.boxes       -- Boxes object (may be empty)
+            result.boxes.cls   -- tensor of class IDs
+            result.boxes.conf  -- tensor of confidence scores
+            result.boxes.xyxy  -- tensor of [x1, y1, x2, y2] pixel coords
+            result.names       -- dict {class_id: class_name}
+    """
+    if not images:
+        logger.warning("run_inference called with empty image list.")
+        return []
 
-	return detections
+    logger.info(
+        "Inference: %d images  [conf=%.2f  iou=%.2f  imgsz=%d  device=%s]",
+        len(images), conf, iou, imgsz, device,
+    )
 
+    results: list[Results] = list(
+        model.predict(
+            source=[str(p) for p in images],
+            conf=conf,
+            iou=iou,
+            imgsz=imgsz,
+            device=device,
+            stream=True,    # generator mode: avoids loading all results into RAM
+            save=False,     # we save ourselves in export.py
+            verbose=verbose,
+        )
+    )
 
-def run_image_inference(
-	image_path: str | Path,
-	config: ModelConfig | None = None,
-	save_visualization: bool = False,
-	output_dir: str | Path | None = None,
-) -> list[Detection]:
-	"""Run YOLO object detection on one image.
-
-	Args:
-		image_path: Path to input image.
-		config: Optional model configuration. Uses defaults if omitted.
-		save_visualization: If True, saves YOLO-rendered image output.
-		output_dir: Directory for rendered output when save_visualization is True.
-
-	Returns:
-		List of detections found in the image.
-	"""
-
-	config = config or ModelConfig()
-	image_path = Path(image_path)
-
-	if not _is_image(image_path):
-		raise FileNotFoundError(f"Image not found or unsupported format: {image_path}")
-
-	model = create_model_from_config(config)
-
-	predict_kwargs: dict[str, Any] = {
-		"conf": config.confidence,
-		"iou": config.iou,
-		"imgsz": config.image_size,
-		"verbose": False,
-	}
-	if config.device:
-		predict_kwargs["device"] = config.device
-
-	if save_visualization:
-		output_dir = Path(output_dir) if output_dir else Path("output") / "raw"
-		output_dir.mkdir(parents=True, exist_ok=True)
-		predict_kwargs["save"] = True
-		predict_kwargs["project"] = str(output_dir)
-		predict_kwargs["name"] = "predictions"
-		predict_kwargs["exist_ok"] = True
-
-	results = model.predict(str(image_path), **predict_kwargs)
-
-	with Image.open(image_path) as img:
-		image_size = img.size
-
-	if not results:
-		return []
-
-	return _extract_detections(results[0], image_path, image_size)
+    n = sum(len(r.boxes) for r in results)
+    logger.info("Inference complete -- %d detections across %d images", n, len(results))
+    return results
 
 
-def run_directory_inference(
-	image_dir: str | Path,
-	config: ModelConfig | None = None,
-	recursive: bool = True,
-) -> list[Detection]:
-	"""Run YOLO object detection on all images inside a directory."""
+def quick_predict(
+    model: YOLO,
+    image_path: str | Path,
+    conf: float = 0.45,
+    device: str = "mps",
+) -> Results:
+    """
+    Single-image prediction. Useful for debugging in a notebook or REPL.
 
-	image_dir = Path(image_dir)
-	if not image_dir.exists() or not image_dir.is_dir():
-		raise NotADirectoryError(f"Invalid image directory: {image_dir}")
-
-	glob_pattern = "**/*" if recursive else "*"
-	image_paths = sorted(path for path in image_dir.glob(glob_pattern) if _is_image(path))
-
-	all_detections: list[Detection] = []
-	for image_path in image_paths:
-		all_detections.extend(run_image_inference(image_path, config=config))
-
-	return all_detections
+    Example
+    -------
+    >>> from src.models.loader import get_model
+    >>> from src.pipeline.inference import quick_predict
+    >>> model  = get_model(weights="runs/train/kestreleye_grape/weights/best.pt")
+    >>> result = quick_predict(model, "data/raw/DJI_0001.JPG")
+    >>> for box in result.boxes:
+    ...     print(result.names[int(box.cls)], f"{float(box.conf):.2%}")
+    """
+    return run_inference(
+        model=model,
+        images=[Path(image_path)],
+        conf=conf,
+        device=device,
+        verbose=True,
+    )[0]
