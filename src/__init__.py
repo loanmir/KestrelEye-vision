@@ -1,1 +1,0 @@
-# KestrelEye Vision — top-level package
