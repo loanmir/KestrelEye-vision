@@ -1,1 +1,0 @@
-# src.utils — image helpers and logging

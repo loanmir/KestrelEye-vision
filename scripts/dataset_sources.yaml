@@ -1,0 +1,172 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# KestrelEye — Dataset Sources Configuration
+# Used by:  scripts/build_dataset.py
+#
+# HOW TO ADD A SOURCE
+# 1. Download the dataset (see DOWNLOAD GUIDE below)
+# 2. Unzip it into  data/sources/<name>/
+# 3. Add a block in the `sources` list below with its class_map
+# 4. Run:  python scripts/build_dataset.py --config scripts/dataset_sources.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Output ────────────────────────────────────────────────────────────────────
+output_dir: data/ke_foundation_dataset   # where the merged dataset will be written
+seed: 42
+
+# ── Split ratios (must sum to 1.0) ────────────────────────────────────────────
+split:
+  train: 0.70
+  valid: 0.20
+  test:  0.10
+
+# ── Class balance ─────────────────────────────────────────────────────────────
+# max_per_class: 0 = no cap (keep all images)
+# Capping prevents the model from learning only majority classes.
+# 3000 is a safe starting point for 9 classes on a ~12k dataset.
+max_per_class: 3000
+
+# ── Unified taxonomy (DO NOT CHANGE class IDs after first training run) ────────
+# 0  healthy_leaf
+# 1  flavescence_doree_leaf
+# 2  esca_leaf
+# 3  downy_mildew_leaf       (peronospora)
+# 4  powdery_mildew_leaf     (oidio)
+# 5  black_rot_leaf
+# 6  healthy_bunch
+# 7  damaged_bunch
+# 8  shoot
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SOURCES
+# Each source needs:
+#   name       : unique identifier (used for logging and filename prefixing)
+#   path       : path to dataset root relative to project root
+#   pre_split  : true  → expects train/images + valid/images + test/images
+#                false → flat images/ + labels/ (script will split)
+#   class_map  : {source_class_id: unified_class_id}
+#                Use null to discard a class: {0: null}
+# ─────────────────────────────────────────────────────────────────────────────
+
+sources:
+
+  # ── SOURCE 1: Current Roboflow grape dataset (ALREADY AVAILABLE) ─────────
+  # 3 classes: 0=Black_rot, 1=Downey_mildew, 2=Leaf_blight
+  # 5817 train / 1000 valid / 100 test (already augmented 3x by Roboflow)
+  - name: grape_roboflow
+    path: data/grape_dataset
+    pre_split: true
+    class_map:
+      0: 5   # Black_rot       → black_rot_leaf
+      1: 3   # Downey_mildew   → downy_mildew_leaf
+      2: 2   # Leaf_blight     → esca_leaf (closest semantic match)
+
+  # ── SOURCE 2: Bacterial-Fungicidal UAV dataset ───────────────────────────
+  # DOWNLOAD:
+  #   Title : "Grapevine Disease Detection from UAV Images"
+  #   Where : https://zenodo.org/records/6343578  (or search "grapevine UAV disease Zenodo")
+  #   Format: YOLO or PASCAL VOC (the script handles both)
+  #   Size  : ~10k images
+  #   Unzip to: data/sources/bacterial_fungicidal/
+  #
+  # UPDATE class_map below after inspecting data.yaml of the downloaded dataset.
+  # Typical classes for this dataset (verify against their data.yaml):
+  #   0=healthy, 1=downy_mildew, 2=powdery_mildew, 3=black_rot, 4=esca
+  - name: bacterial_fungicidal
+    path: data/sources/bacterial_fungicidal
+    pre_split: false
+    enabled: false   # set to true after downloading
+    class_map:
+      0: 0   # healthy        → healthy_leaf       (VERIFY against source data.yaml)
+      1: 3   # downy_mildew   → downy_mildew_leaf  (VERIFY)
+      2: 4   # powdery_mildew → powdery_mildew_leaf(VERIFY)
+      3: 5   # black_rot      → black_rot_leaf      (VERIFY)
+      4: 2   # esca           → esca_leaf           (VERIFY)
+
+  # ── SOURCE 3: Tardif et al. — Flavescence Dorée dataset ─────────────────
+  # DOWNLOAD:
+  #   Title : "Dataset for Flavescence Dorée detection in vineyards"
+  #   Authors: Tardif et al.
+  #   Where : https://data.mendeley.com  (search "flavescence doree grapevine")
+  #           OR: https://zenodo.org     (search "flavescence doree detection dataset")
+  #   Format: YOLO or COCO JSON
+  #   Size  : ~1483 images
+  #   Unzip to: data/sources/tardif_fd/
+  #
+  # This dataset focuses on FD — update class_map after inspecting their data.yaml.
+  - name: tardif_fd
+    path: data/sources/tardif_fd
+    pre_split: false
+    enabled: false
+    class_map:
+      0: 1   # flavescence_doree → flavescence_doree_leaf (VERIFY)
+      1: 0   # healthy           → healthy_leaf            (VERIFY)
+
+  # ── SOURCE 4: LDD — Leaf Disease Detection dataset ───────────────────────
+  # DOWNLOAD:
+  #   Where  : https://universe.roboflow.com  (search "grape leaf disease detection")
+  #            Top candidates:
+  #            - "Grape Leaf Disease" by various authors (YOLO format available)
+  #            - "Plant Disease Detection" datasets with grape classes
+  #   Size   : ~1092 images
+  #   Format : YOLO (download as YOLOv8 format from Roboflow)
+  #   Unzip to: data/sources/ldd/
+  #
+  # Roboflow download command (after registering free account):
+  #   pip install roboflow
+  #   python -c "
+  #   from roboflow import Roboflow
+  #   rf = Roboflow(api_key='YOUR_KEY')
+  #   proj = rf.workspace('WORKSPACE').project('PROJECT_NAME')
+  #   proj.version(1).download('yolov8', location='data/sources/ldd')
+  #   "
+  - name: ldd
+    path: data/sources/ldd
+    pre_split: false
+    enabled: false
+    class_map:
+      0: 3   # UPDATE after inspecting source data.yaml
+      1: 4
+      2: 5
+
+  # ── SOURCE 5: Saccuti — Lambrusco multispectral ──────────────────────────
+  # DOWNLOAD:
+  #   Title : "Saccuti - A multispectral dataset for grapevine disease detection"
+  #   Where : https://zenodo.org  (search "Saccuti Lambrusco dataset")
+  #           OR: https://ieee-dataport.org
+  #   Note  : Multispectral (NDVI/NIR/RED channels) — extract RGB only for YOLOv8
+  #   Size  : variable
+  #   Unzip to: data/sources/saccuti/
+  #
+  # NOTE: Multispectral images may need pre-processing (see scripts/README below).
+  # Only use RGB channel if dataset includes it as separate images.
+  - name: saccuti
+    path: data/sources/saccuti
+    pre_split: false
+    enabled: false
+    class_map:
+      0: 0   # UPDATE after inspecting source dataset
+      1: 3
+
+  # ── SOURCE 6: PlantVillage — grape leaf (healthy + diseased) ────────────
+  # DOWNLOAD:
+  #   Where : https://www.kaggle.com/datasets/emmarex/plantdisease
+  #           OR: https://github.com/spMohanty/PlantVillage-Dataset
+  #   License: CC0 (fully open, commercial OK)
+  #   Note  : Classification dataset (no bboxes) — use whole image as bbox
+  #           The script handles this: if label is missing but image exists,
+  #           it generates a full-image bbox annotation automatically.
+  #   Relevant classes: Grape___Black_rot, Grape___Esca_(Black_Measles),
+  #                     Grape___Leaf_blight, Grape___healthy
+  #   Unzip to: data/sources/plantvillage/
+  #             Structure: data/sources/plantvillage/images/<class_name>/*.JPG
+  - name: plantvillage
+    path: data/sources/plantvillage
+    pre_split: false
+    enabled: false
+    # class_map for folder-based classification datasets:
+    # Use folder names instead of numeric IDs (the script handles this)
+    folder_class_map:
+      "Grape___Black_rot":               5   # black_rot_leaf
+      "Grape___Esca_(Black_Measles)":    2   # esca_leaf
+      "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)": 2  # esca_leaf (close match)
+      "Grape___healthy":                 0   # healthy_leaf
