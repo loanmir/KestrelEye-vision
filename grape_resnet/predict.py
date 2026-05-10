@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from config import get_data_generators, MODEL_SAVE_PATH, TRAIN_CLASSES
+from config import get_data_generators, MODEL_SAVE_PATH, CLASSES
 
 def evaluate_model():
     try:
@@ -14,8 +14,8 @@ def evaluate_model():
         # Example of getting a single prediction
         images, labels = next(val_gen)
         preds = model.predict(images)
-        predicted_class = TRAIN_CLASSES[np.argmax(preds[0])]
-        actual_class = TRAIN_CLASSES[int(labels[0])]
+        predicted_class = CLASSES[np.argmax(preds[0])]
+        actual_class = CLASSES[int(labels[0])]
         
         print(f"\nSample Prediction:")
         print(f"Predicted: {predicted_class} | Actual: {actual_class}")

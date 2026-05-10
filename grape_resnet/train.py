@@ -7,7 +7,7 @@ def run_training():
     
     # Callbacks to handle training efficiency
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True),
+        EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
         ModelCheckpoint(
             MODEL_SAVE_PATH, 
             save_best_only=True, 
@@ -20,7 +20,7 @@ def run_training():
     history = model.fit(
         train_gen,
         validation_data=val_gen,
-        epochs=100,
+        epochs=25,
         callbacks=callbacks
     )
     print(f"Training complete. Best model saved to {MODEL_SAVE_PATH}")

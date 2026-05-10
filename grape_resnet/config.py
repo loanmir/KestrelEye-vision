@@ -20,7 +20,7 @@ TRAIN_DIR = '../data/classification_dataset/Final Training Data'
 VAL_DIR = '../data/classification_dataset/Original Data/test'
 
 # Configuration
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 TARGET_SIZE = (224, 224)
 
 # Now unified because your folder names match!
