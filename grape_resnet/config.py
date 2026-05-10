@@ -16,8 +16,8 @@ if not os.path.exists(MODEL_FOLDER):
     os.makedirs(MODEL_FOLDER)
     
 
-TRAIN_DIR = './data/classification_dataset/Final Training Data'
-VAL_DIR = './data/classification_dataset/Original Data/test'
+TRAIN_DIR = '../data/classification_dataset/Final Training Data'
+VAL_DIR = '../data/classification_dataset/Original Data/test'
 
 # Configuration
 BATCH_SIZE = 64
