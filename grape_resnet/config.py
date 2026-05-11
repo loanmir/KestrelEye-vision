@@ -27,7 +27,17 @@ TARGET_SIZE = (224, 224)
 CLASSES = ['Black Rot', 'ESCA', 'Healthy', 'Leaf Blight']
 
 def get_data_generators():
-    train_gen = ImageDataGenerator().flow_from_directory(
+
+    train_datagen = ImageDataGenerator(
+        horizontal_flip=True,
+        rotation_range=15,
+        width_shift_range=0.1,
+        height_shift_range=0.1,
+        fill_mode='nearest'
+    )
+
+
+    train_gen = train_datagen.flow_from_directory(
         TRAIN_DIR,
         target_size=TARGET_SIZE,
         batch_size=BATCH_SIZE,
@@ -53,11 +63,12 @@ def build_resnet50():
     model = Sequential([
         base_model,
         GlobalAvgPool2D(),
+        tf.keras.layers.Dropout(0.3),
         Dense(4, activation='softmax')
     ])
     
     model.compile(
-        optimizer='adam',
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
         loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
