@@ -11,7 +11,7 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-BASE_PATH = os.path.join(PROJECT_ROOT, "data", "kaggle_dataset")
+BASE_PATH = os.path.join(PROJECT_ROOT, "data", "UAV_dataset")
 
 IMG_TRAIN = os.path.join(BASE_PATH, "images", "train")
 IMG_VAL   = os.path.join(BASE_PATH, "images", "val")
@@ -25,12 +25,14 @@ YAML_PATH = os.path.join(BASE_PATH, "data.yaml")
 # ---------------------------------------------------------------------------
 # Classes
 # ---------------------------------------------------------------------------
-CLASS_NAMES = [
+"""CLASS_NAMES = [
     "Grape__BlackRot",
     "Grape__Esca",
     "Grape__Healthy",
     "Grape__LeafBlight",
-]
+]"""
+
+CLASS_NAMES = ["grape","unhealthy"]
 
 # ---------------------------------------------------------------------------
 # Training hyperparameters
@@ -39,9 +41,9 @@ MODEL_WEIGHTS = "yolov8n.pt"   # base checkpoint
 EPOCHS        = 30
 IMG_SIZE      = 640
 BATCH_SIZE    = 16
-PROJECT       = "grape_project"
+PROJECT       = "grape_UAV_project"
 RUN_NAME      = "exp"
-DEVICE        = "mps"
+DEVICE        = "cpu"
 WORKERS       = 8 
 
 # ---------------------------------------------------------------------------
