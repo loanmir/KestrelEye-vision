@@ -13,11 +13,11 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 # ---------------------------------------------------------------------------
 BASE_PATH = os.path.join(PROJECT_ROOT, "data", "UAV_dataset")
 
-IMG_TRAIN = os.path.join(BASE_PATH, "images", "train")
-IMG_VAL   = os.path.join(BASE_PATH, "images", "val")
+IMG_TRAIN = os.path.join(BASE_PATH, "train", "images")
+IMG_VAL   = os.path.join(BASE_PATH, "valid", "images")
 
-LBL_TRAIN = os.path.join(BASE_PATH, "labels", "train")
-LBL_VAL   = os.path.join(BASE_PATH, "labels", "val")
+LBL_TRAIN = os.path.join(BASE_PATH, "train", "labels")
+LBL_VAL   = os.path.join(BASE_PATH, "valid", "labels")
 
 # Path to the data.yaml consumed by Ultralytics
 YAML_PATH = os.path.join(BASE_PATH, "data.yaml")
@@ -32,7 +32,7 @@ YAML_PATH = os.path.join(BASE_PATH, "data.yaml")
     "Grape__LeafBlight",
 ]"""
 
-CLASS_NAMES = ["grape","unhealthy"]
+CLASS_NAMES = ["unhealthy"]
 
 # ---------------------------------------------------------------------------
 # Training hyperparameters
