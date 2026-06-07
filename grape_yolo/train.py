@@ -5,6 +5,9 @@ Usage:
     python train.py
 """
 
+import os
+#os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
 from ultralytics import YOLO
 
 from config import (
@@ -17,6 +20,14 @@ from config import (
     RUN_NAME,
     DEVICE,
     WORKERS,
+    #OPTIMIZER,
+    #LR0,
+    #LRF,
+    #WEIGHT_DECAY,
+    PATIENCE,
+    #CLOSE_MOSAIC,
+    #FLIPUD,
+    #DEGREES,
 )
 
 
@@ -31,6 +42,15 @@ def train():
         name=RUN_NAME,
         device=DEVICE,
         workers=WORKERS,
+        #amp=False,
+        #optimizer=OPTIMIZER,
+        #lr0=LR0,
+        #lrf=LRF,
+        #weight_decay=WEIGHT_DECAY,
+        patience=PATIENCE,
+        #close_mosaic=CLOSE_MOSAIC,
+        #flipud=FLIPUD,
+        #degrees=DEGREES,
     )
     return results
 
