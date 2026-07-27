@@ -25,7 +25,10 @@ YAML_PATH = os.path.join(BASE_PATH, "data.yaml")
 # Classes
 # ---------------------------------------------------------------------------
 
-CLASS_NAMES = ["vine"]                                            
+CLASS_NAMES = ["vine"]   
+
+
+CONF_THRESHOLD = 0.35   # confidence threshold for predictions
 
 # Training hyperparameters
 MODEL_WEIGHTS = "yolo11s-seg.pt"   # <-- SEGMENTATION model (the -seg suffix is essential)
